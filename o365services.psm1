@@ -1,6 +1,6 @@
 #Requires -Modules CredStore 
-# Office 365 Services Funcitions
-# TK@IPLP | 9 October 2019
+# Office 365 Services Functions
+# TK | 9 October 2019
 
 function Connect-O365Service {
     <#
