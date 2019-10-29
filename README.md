@@ -1,2 +1,5 @@
-# PowerShell Module - O365Services
-Initial alpha version - not really usable. Have a dependency on CredStore module.
+## O365Services
+Module to make a PowerShell connection to Office 365 services a bit easier. 
+Have a dependency on CredStore module.
+
+Initial alpha version - not really usable.
