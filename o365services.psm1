@@ -1,6 +1,6 @@
-#Requires -Modules CredStore 
+#Requires -Modules Microsoft.PowerShell.SecretsManagement 
 # Office 365 Services Functions
-# Tomasz Knop | 9 October 2019
+# Tomasz Knop | Tuesday 25 Feb 2020
 
 function Connect-O365Service {
     <#
@@ -9,7 +9,7 @@ function Connect-O365Service {
     #>
     [CmdletBinding()]
     param(
-        [parameter()] [validateSet("AzureAD", "ExchangeOnPrem", "Exchange", "SharePoint", "SecAndCompl", "Skype", "Teams", "All")] [string[]] $Services = @("All"),
+        [parameter()] [validateSet("AzureAD", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurityAndCompliance", "Skype", "Teams", "All")] [string[]] $Services = @("All"),
         [parameter()] [string] $UserPrincipalName = [System.Environment]::GetEnvironmentVariable("UPN"),
         [parameter()] [validateNotNullorEmpty()] [string] $TenantID, 
         [parameter()] [switch] $MFA,
@@ -18,7 +18,7 @@ function Connect-O365Service {
     begin {
         $moduleVerbose = $false
         Write-Verbose -Message "[BEGIN] Starting $($MyInvocation.Mycommand)"
-        $availableServices = @("AzureAD", "ExchangeOnPrem", "Exchange", "SharePoint", "SecAndCompl", "Skype", "Teams")
+        $availableServices = @("AzureAD", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurtiyAndCompliance", "Skype", "Teams")
         $connectServices = [ordered]@{ }
         $tryServices = @()
         $availableServices.ForEach( {
@@ -28,7 +28,22 @@ function Connect-O365Service {
             })
         $connectedServicesList = @()
         Write-Output "UserPrincipalName: $UserPrincipalName"
-        $userCredential = Get-MyCredential -Username $UserPrincipalName
+        Write-Verbose -Message ("[BEGIN] Looking up {0} in Credential vaults" -f $UserPrincipalName) 
+        $cachedCredential = @{}
+        (Get-SecretInfo | Where-Object TypeName -eq PSCredential).ForEach( {
+            $getCredential = Get-Secret $PSItem.Name -Vault $PSItem.Vault
+            if ($getCredential.UserName -eq $UserPrincipalName) {
+                $cachedCredentials.Add($PSItem.Name, $getCredential)
+            }
+        } )
+        if ($cachedCredentials) {
+            Write-Verbose -Message ("[BEGIN] Cached Credentials {0} found and retrieved. Only first would be used." -f $cachedCredential.Count)
+            $userCredential = $cachedCredential[0]
+        }
+        else {
+            Write-Verbose -Message "[BEGIN] No cached Credentials found. Prompting ..."
+            $userCredential = Get-Credential -Message "Enter Credentials (UPN)"
+        }
     }
     process {
         switch ( $tryServices ) {
@@ -84,9 +99,9 @@ function Connect-O365Service {
                 }
             }
             "ExchangeOnPrem" { }
-            "Exchange" { }
+            "ExchangeOnline" { }
             "SharePoint" { }
-            "SecAndCompl" { }
+            "SecurtiyAndCompliance" { }
             "Skype" { }
             "Teams" { }
         }
