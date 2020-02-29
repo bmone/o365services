@@ -19,33 +19,31 @@ function Connect-O365Service {
         $moduleVerbose = $false
         Write-Verbose -Message "[BEGIN] Starting $($MyInvocation.Mycommand)"
         $availableServices = @("AzureAD", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurtiyAndCompliance", "Skype", "Teams")
-        $connectServices = [ordered]@{ }
+        $connectServices = [ordered]@{}
         $tryServices = @()
         $availableServices.ForEach( {
                 $tryService = if ($Services -contains "All") { $true } else { $Services -contains $PSItem }
                 $connectServices.Add($PSItem, $tryService)
                 if ($tryService) { $tryServices += $PSItem }
             })
-        $connectedServicesList = @()
-        Write-Output "UserPrincipalName: $UserPrincipalName"
+        Write-Verbose -Message ("[BEGIN] Using UserPrincipalName {0}" -f $UserPrincipalName)
         Write-Verbose -Message ("[BEGIN] Looking up {0} in Credential vaults" -f $UserPrincipalName) 
-        $cachedCredential = @{}
+        $cachedCredentials = @{}
         (Get-SecretInfo | Where-Object TypeName -eq PSCredential).ForEach( {
             $getCredential = Get-Secret $PSItem.Name -Vault $PSItem.Vault
-            if ($getCredential.UserName -eq $UserPrincipalName) {
-                $cachedCredentials.Add($PSItem.Name, $getCredential)
-            }
+            if ($getCredential.UserName -eq $UserPrincipalName) { $cachedCredentials.Add($PSItem.Name, $getCredential) }
         } )
-        if ($cachedCredentials) {
-            Write-Verbose -Message ("[BEGIN] Cached Credentials {0} found and retrieved. Only first would be used." -f $cachedCredential.Count)
-            $userCredential = $cachedCredential[0]
+        if ($cachedCredentials.Count -gt 0) {
+            Write-Verbose -Message ("[BEGIN] {0} Cached Credentials found and retrieved. Only first would be used." -f $cachedCredentials.Count)
+            $userCredential = $cachedCredentials[0]
         }
         else {
             Write-Verbose -Message "[BEGIN] No cached Credentials found. Prompting ..."
-            $userCredential = Get-Credential -Message "Enter Credentials (UPN)"
+            $userCredential = Get-Credential -Message "Enter Credentials (UPN)" -UserName $UserPrincipalName
         }
     }
     process {
+        $connectedServicesList = @()
         switch ( $tryServices ) {
             "AzureAD" {
                 # AzureAD v1 (skip if tenantID supplied)
