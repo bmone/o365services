@@ -49,9 +49,9 @@ function Connect-O365Service {
                 $userCredential = Get-Credential -Message "Enter Credential to use (UPN)" -UserName $UserPrincipalName               
             }
         }
+        Write-Output "Selected services: $(($connectServices.GetEnumerator() | Where-Object Value -eq $true).Name -join ' | ')"
     }
     process {
-        Write-Output "Selected services: $(($connectServices.GetEnumerator() | Where-Object Value -eq $true).Name -join ' | ')"
         $connectedServices = @()
         switch ( $tryServices ) {
             "AzureADLegacy" {
