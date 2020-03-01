@@ -52,6 +52,7 @@ function Connect-O365Service {
         }
     }
     process {
+        Write-Output "Selected services: $(($connectServices.GetEnumerator() | Where-Object Value -eq $true).Name -join ' | ')"
         $connectedServices = @()
         switch ( $tryServices ) {
             "AzureAD" {
