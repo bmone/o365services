@@ -33,7 +33,6 @@ function Connect-O365Service {
             # Look up stored Secret if available
             if ($null -eq (Get-Module -Name "Microsoft.PowerShell.SecretsManagement" -ListAvailable -Verbose:$moduleVerbose)) {
                 Write-Verbose -Message ("[PROCESS] Microsoft.PowerShell.SecretsManagement Module is not present." -f $service)
-                continue
             }
             else {
                 Import-Module -Name "Microsoft.PowerShell.SecretsManagement" -Verbose:$moduleVerbose
@@ -56,12 +55,11 @@ function Connect-O365Service {
         $connectedServices = @()
         switch ( $tryServices ) {
             "AzureAD" {
-                # AzureAD v1 Legacy (skip if tenantID supplied)
+                # AzureAD v1 Legacy [MSOnline] (skip if tenantID supplied)
                 if ( (-not $TenantID) -and ($Legacy.IsPresent) ) {
-                    $service = "AzureAD (MSOline)"
+                    $service = "AzureAD (Legacy)"
                     if ($null -eq (Get-Module -Name "MSOnline" -ListAvailable -Verbose:$moduleVerbose)) {
                         Write-Verbose -Message ("[PROCESS] MSOnline Module is not present! Skipping {0}" -f $service)
-                        continue
                     }
                     else {
                         $paramAzureAD = @{ Credential = $userCredential }
