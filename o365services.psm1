@@ -8,16 +8,15 @@ function Connect-O365Service {
     #>
     [CmdletBinding()]
     param(
-        [parameter()] [validateSet("AzureAD", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurityAndCompliance", "Skype", "Teams", "All")] [string[]] $Services = @("All"),
+        [parameter()] [validateSet("AzureAD", "AzureADLegacy", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurityAndCompliance", "Skype", "Teams", "All")] [string[]] $Services = @("All"),
         [parameter(Mandatory)] [validateNotNullorEmpty()] [string] $UserPrincipalName,
         [parameter()] [validateNotNullorEmpty()] [string] $TenantID, 
         [parameter()] [switch] $MFA,
-        [parameter()] [switch] $Legacy,
         [parameter()] [switch] $Disconnect
     )
     begin {
         Write-Verbose -Message "[BEGIN] Starting $($MyInvocation.MyCommand)"
-        $availableServices = @("AzureAD", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurtiyAndCompliance", "Skype", "Teams")
+        $availableServices = @("AzureAD", "AzureADLegacy", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurtiyAndCompliance", "Skype", "Teams")
         $connectServices = [ordered]@{}
         $tryServices = @()
         $availableServices.ForEach( {
@@ -55,22 +54,22 @@ function Connect-O365Service {
         Write-Output "Selected services: $(($connectServices.GetEnumerator() | Where-Object Value -eq $true).Name -join ' | ')"
         $connectedServices = @()
         switch ( $tryServices ) {
-            "AzureAD" {
+            "AzureADLegacy" {
                 # AzureAD v1 Legacy [MSOnline] (skip if tenantID supplied)
-                if ( (-not $TenantID) -and ($Legacy.IsPresent) ) {
+                if (-not $TenantID) {
                     $service = "AzureAD (Legacy)"
                     if ($null -eq (Get-Module -Name "MSOnline" -ListAvailable -Verbose:$moduleVerbose)) {
-                        Write-Verbose -Message ("[PROCESS] MSOnline Module is not present! Skipping {0}" -f $service)
+                        Write-Verbose -Message ("[PROCESS] Skipping {0}! MSOnline Module is not present." -f $service)
                     }
                     else {
                         $paramAzureAD = @{ Credential = $userCredential }
                         if ($MFA.IsPresent) { $paramAzureAD.Remove('Credential') }
                         Import-Module MSOnline -Verbose:$moduleVerbose
                         try {
-                            Write-Verbose -Message ("[PROCESS] [TRY] Connecting to $service ...")
+                            Write-Verbose -Message ("[PROCESS] [TRY] Attempting to connect to {0} ..." -f $service)
                             $null = Connect-MsolService @paramAzureAD -ErrorAction Stop
                             if ($tID = Get-MsolCompanyInformation) { $service += (" [{0}]" -f $tID.DisplayName) }
-                            Write-Verbose -Message ("[PROCESS] [TRY] $service connected.")
+                            Write-Verbose -Message ("[PROCESS] [TRY] {0} connected." -f $service)
                             $connectedServices += $service
                         }
                         catch {
@@ -79,11 +78,12 @@ function Connect-O365Service {
                         }
                     }
                 }
-                # AzureAD v2
+            }
+            "AzureAD" {
+                # AzureAD v2 Modern [AzureAD]
                 $service = "AzureAD"
                 if ($null -eq (Get-Module -Name "AzureAD" -ListAvailable -Verbose:$moduleVerbose)) {
-                    Write-Warning -Message ("[PROCESS] AzureAD Module is not present! Skipping {0}" -f $service)
-                    continue
+                    Write-Warning -Message ("[PROCESS] Skipping {0}! AzureAD Module is not present." -f $service)
                 }
                 else {
                     $paramAzureAD = @{ Credential = $userCredential }
@@ -93,10 +93,10 @@ function Connect-O365Service {
                     }
                     Import-Module AzureAD -Verbose:$moduleVerbose
                     try { 
-                        Write-Verbose -Message ("[PROCESS] [TRY] Connecting to $service ...")
+                        Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect to {0} ..." -f $service)
                         $null = Connect-AzureAD @paramAzureAD -ErrorAction Stop
                         if ($tID = Get-AzureADTenantDetail) { $service += (" [{0}]" -f $tID.DisplayName) }
-                        Write-Verbose -Message ("[PROCESS] [TRY] $service connected.")
+                        Write-Verbose -Message ("[PROCESS] [TRY] {0} connected." -f $service)
                         $connectedServices += $service
                     }
                     catch {
