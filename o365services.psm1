@@ -1,20 +1,6 @@
 # Connect to Office 365 Services
 # Tomasz Knop | Tuesday 25 Feb 2020
 
-function Read-PromptChoice {
-    [CmdletBinding()]
-    param( 
-        [parameter()] [string] $Title = [string]::Empty,
-        [parameter()] [string] $Message = "Make your choice",
-        [parameter()] [string[]] $Choices = @("&Yes#Choose Yes", "&No#Choose No"),
-        [parameter()] [uint16] $DefaultChoice = 0
-    )
-    # $Choices example : "&Yes#Delete all","&No#Abort operation"
-    [System.Management.Automation.Host.ChoiceDescription[]] $Options = $Choices |
-        ForEach-Object { New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList $PSItem.Split('#') }
-    return ($Host.UI.PromptForChoice($Title, $Message, $Options, $DefaultChoice))
-}
-
 function Connect-O365Service {
     <#
     .SYNOPSIS
@@ -23,9 +9,10 @@ function Connect-O365Service {
     [CmdletBinding()]
     param(
         [parameter()] [validateSet("AzureAD", "ExchangeOnPrem", "ExchangeOnline", "SharePoint", "SecurityAndCompliance", "Skype", "Teams", "All")] [string[]] $Services = @("All"),
-        [parameter()] [string] $UserPrincipalName = [System.Environment]::GetEnvironmentVariable("UPN"),
+        [parameter(Mandatory)] [validateNotNullorEmpty()] [string] $UserPrincipalName,
         [parameter()] [validateNotNullorEmpty()] [string] $TenantID, 
         [parameter()] [switch] $MFA,
+        [parameter()] [switch] $Legacy,
         [parameter()] [switch] $Disconnect
     )
     begin {
@@ -39,45 +26,39 @@ function Connect-O365Service {
                 if ($tryService) { $tryServices += $PSItem }
             })
         $moduleVerbose = $false
+        $userCredential = $null
         Write-Verbose -Message ("[BEGIN] Using UserPrincipalName '{0}'." -f $UserPrincipalName)
-        $cachedCredentials = @{}
-        if ($null -eq (Get-Module -Name "Microsoft.PowerShell.SecretsManagement" -ListAvailable -Verbose:$moduleVerbose)) {
-            Write-Verbose -Message ("[PROCESS] Microsoft.PowerShell.SecretsManagement Module is not present." -f $service)
-            continue
-        }
-        else {
-            Import-Module -Name "Microsoft.PowerShell.SecretsManagement" -Verbose:$moduleVerbose
-            Write-Verbose -Message ("[BEGIN] Looking up UserPrincipalName in Credential vaults." -f $UserPrincipalName) 
-            foreach ( $item in (Get-SecretInfo | Where-Object TypeName -eq PSCredential) ) { 
-                $getCredential = Get-Secret $item.Name -Vault $item.Vault
-                if ($getCredential.UserName -eq $UserPrincipalName) {
-                        $cachedCredentials[$item.Name] = $getCredential
-                }
+        # Use Credentials only if MFA is not required
+        if (-not $MFA.IsPresent) {
+            # Look up stored Secret if available
+            if ($null -eq (Get-Module -Name "Microsoft.PowerShell.SecretsManagement" -ListAvailable -Verbose:$moduleVerbose)) {
+                Write-Verbose -Message ("[PROCESS] Microsoft.PowerShell.SecretsManagement Module is not present." -f $service)
+                continue
             }
-        }
-        switch ($cachedCredentials.Count) {
-            0 {
-                Write-Verbose -Message "[BEGIN] No cached Credentials found. Prompting ..."
+            else {
+                Import-Module -Name "Microsoft.PowerShell.SecretsManagement" -Verbose:$moduleVerbose
+                Write-Verbose -Message "[BEGIN] Looking up stored secrets."
+                if ($cachedCredentials = Get-SecretInfo | Where-Object TypeName -eq PSCredential | 
+                    ForEach-Object { Get-Secret $PSItem.Name -Vault $PSItem.Vault | Where-Object UserName -eq $UserPrincipalName } | 
+                        Select-Object -First 1) {
+                            Write-Verbose -Message "[BEGIN] Secret found and retreived."
+                            $userCredential = $cachedCredentials
+                        }
+            }
+            # Fallback to standard Credential prompt
+            if (-not $userCredential) {
+                Write-Verbose -Message "[BEGIN] No stored Secret found. Prompting ..."
                 $userCredential = Get-Credential -Message "Enter Credential to use (UPN)" -UserName $UserPrincipalName               
             }
-            1 {
-                Write-Verbose -Message ("[BEGIN] Found cached Credential for '{0}'." -f $UserPrincipalName)
-                $userCredential = $cachedCredentials
-            }
-            {$PSItem -gt 1} {
-                Write-Verbose -Message "[BEGIN] Found many cached Credentials. Prompting ..."
-                $userCredential = $cachedCredentials[(Read-PromptChoice -Message "Which cached Credential would you like to use for $($UserPrincipalName)?" -Choices $cachedCredentials.Keys)] 
-            }
         }
-        Write-Output "Requested services: $tryServices"
     }
     process {
         $connectedServices = @()
         switch ( $tryServices ) {
             "AzureAD" {
-                # AzureAD v1 (skip if tenantID supplied or MFA is in use)
-                if ( (-not $TenantID) -and (-not $MFA.IsPresent) ) {
-                    $service = "AzureAD (legacy)"
+                # AzureAD v1 Legacy (skip if tenantID supplied)
+                if ( (-not $TenantID) -and ($Legacy.IsPresent) ) {
+                    $service = "AzureAD (MSOline)"
                     if ($null -eq (Get-Module -Name "MSOnline" -ListAvailable -Verbose:$moduleVerbose)) {
                         Write-Verbose -Message ("[PROCESS] MSOnline Module is not present! Skipping {0}" -f $service)
                         continue
@@ -87,7 +68,7 @@ function Connect-O365Service {
                         if ($MFA.IsPresent) { $paramAzureAD.Remove('Credential') }
                         Import-Module MSOnline -Verbose:$moduleVerbose
                         try {
-                            Write-Verbose -Message ("[PROCESS] [TRY] Connecting to $service")
+                            Write-Verbose -Message ("[PROCESS] [TRY] Connecting to $service ...")
                             $null = Connect-MsolService @paramAzureAD -ErrorAction Stop
                             if ($tID = Get-MsolCompanyInformation) { $service += (" [{0}]" -f $tID.DisplayName) }
                             Write-Verbose -Message ("[PROCESS] [TRY] $service connected.")
@@ -113,7 +94,7 @@ function Connect-O365Service {
                     }
                     Import-Module AzureAD -Verbose:$moduleVerbose
                     try { 
-                        Write-Verbose -Message ("[PROCESS] [TRY] Connecting to $service")
+                        Write-Verbose -Message ("[PROCESS] [TRY] Connecting to $service ...")
                         $null = Connect-AzureAD @paramAzureAD -ErrorAction Stop
                         if ($tID = Get-AzureADTenantDetail) { $service += (" [{0}]" -f $tID.DisplayName) }
                         Write-Verbose -Message ("[PROCESS] [TRY] $service connected.")
