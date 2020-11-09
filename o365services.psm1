@@ -8,7 +8,7 @@ function Connect-O365Service {
     #>
     [CmdletBinding()]
     param(
-        [parameter()] [validateSet("AzureAD", "AzureADLegacy", "ExchangeOnPrem", "ExchangeOnline", "SecurityAndCompliance", "SharePoint", "Skype", "Teams", "All")] [string[]] $Service = @("All"),
+        [parameter()] [validateSet("AzureAD", "AzureADLegacy", "ExchangeOnPrem", "ExchangeOnline", "SecurityAndCompliance", "SharePoint", "Skype", "Teams", "InformationProtection","All")] [string[]] $Service = @("All"),
         [parameter(Mandatory)] [validateNotNullorEmpty()] [string] $UserPrincipalName,
         [parameter()] [validateNotNullorEmpty()] [string] $TenantID, 
         [parameter()] [switch] $MFA,
@@ -17,8 +17,8 @@ function Connect-O365Service {
     begin {
         Write-Verbose -Message "[BEGIN] Starting $($MyInvocation.MyCommand)"
         $moduleVerbose = $false
-        $o365Services = @( "AzureAD", "AzureADLegacy", "ExchangeOnPrem", "ExchangeOnline", "SecurtiyAndCompliance", "SharePoint", "Skype", "Teams" )
-        $connectO365Services = [ordered]@{ }
+        $o365Services = @( "AzureAD", "AzureADLegacy", "ExchangeOnPrem", "ExchangeOnline", "SecurtiyAndCompliance", "SharePoint", "Skype", "Teams", "InformationProtection" )
+        $connectO365Services = [ordered]@{}
         $o365Services.ForEach( {
                 $tryService = if ($Service -contains "All") { $true } else { $Service -contains $PSItem } 
                 $connectO365Services[$PSItem] = $tryService 
@@ -30,23 +30,23 @@ function Connect-O365Service {
         # Use Credentials only if MFA is not required
         if (-not $MFA.IsPresent) {
             # Look up stored Secret if available
-            if ($null -eq (Get-Module -Name "Microsoft.PowerShell.SecretsManagement" -ListAvailable -Verbose:$moduleVerbose)) {
-                Write-Verbose -Message ("[BEGIN] Microsoft.PowerShell.SecretsManagement Module is not present." -f $service)
+            if ($null -eq (Get-Module -Name "Microsoft.PowerShell.SecretManagement" -ListAvailable -Verbose:$moduleVerbose)) {
+                Write-Verbose -Message ("[BEGIN] Microsoft.PowerShell.SecretManagement Module is not present. Secret Vaults unavailable." -f $service)
             }
             else {
-                Import-Module -Name "Microsoft.PowerShell.SecretsManagement" -Verbose:$moduleVerbose
-                Write-Verbose -Message "[BEGIN] Looking up stored secrets."
+                Import-Module -Name "Microsoft.PowerShell.SecretManagement" -Verbose:$moduleVerbose
+                Write-Verbose -Message "[BEGIN] Looking up stored credential in Secret Vaults ..."
                 if ($cachedCredentials = Get-SecretInfo | Where-Object TypeName -eq PSCredential | 
                     ForEach-Object { Get-Secret $PSItem.Name -Vault $PSItem.Vault | Where-Object UserName -eq $UserPrincipalName } | 
                     Select-Object -First 1) {
-                    Write-Verbose -Message "[BEGIN] Secret found and retreived."
+                    Write-Verbose -Message "[BEGIN] Secret found and retreived from the Vault."
                     $userCredential = $cachedCredentials
                 }
             }
             # Fallback to standard Credential prompt
             if (-not $userCredential) {
-                Write-Verbose -Message "[BEGIN] No stored Secret found. Prompting ..."
-                $userCredential = Get-Credential -Message "Enter Credential to use (UPN)" -UserName $UserPrincipalName               
+                Write-Verbose -Message "[BEGIN] Falling back to Credential Prompt ..."
+                $userCredential = Get-Credential -Message "Enter credential to use (UPN)" -UserName $UserPrincipalName               
             }
         }
         Write-Output "Selected services: $($tryO365Services -join ' | ')"
@@ -111,6 +111,40 @@ function Connect-O365Service {
             "SecurtiyAndCompliance" { }
             "Skype" { }
             "Teams" { }
+            "InformationProtection" {
+                # Azure Information Protection [AIP]
+                $o365Service = @{
+                    Name = $PSItem
+                    ModuleName = "AIPService"
+                    ModuleInfo = $null
+                    ModuleVersion = $null
+                    IsConnected = $false
+                    ConnectedAt = $null
+                }
+                if ($null -eq ($o365Service.ModuleInfo = Get-Module -Name $o365Service.ModuleName -ListAvailable -Verbose:$moduleVerbose))  {
+                    Write-Warning -Message ("[PROCESS] Skipping {0}! {1} module is not present." -f $o365Service.Name, $o365Service.ModuleName)
+                }
+                else {
+                    $o365Service.ModuleVersion = (($o365Service.ModuleInfo).Version).ToString()
+                    $hashArgs = @{ Credential = $userCredential }
+                    switch ($true) {
+                        { $MFA.IsPresent } { $hashArgs.Add('AccountId', $UserPrincipalName) ; $hashArgs.Remove('Credential') }
+                        { $TenantID } { $hashArgs.Add('TenantID', $TenantID) ; }
+                    }
+                    Import-Module -Name $o365Service.ModuleName -Verbose:$moduleVerbose
+                    try { 
+                        Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect to {0} ..." -f $o365Service.Name)
+                        $null = Connect-AIPService @hashArgs -ErrorAction Stop
+                        # if ($tID = Get-AzureADTenantDetail) { $o365Service += (" [{0}]" -f $tID.DisplayName) }
+                        Write-Verbose -Message ("[PROCESS] [TRY] {0} connected." -f $o365Service.Name)
+                        $connectedServices += $o365Service
+                    }
+                    catch {
+                        Write-Warning -Message ("[PROCESS] [CATCH] {0} - Connection exception occured!" -f $o365Service)
+                        $PSCmdlet.ThrowTerminatingError($PSitem)
+                    }
+                }
+            }
         }
     }
     end {
