@@ -29,24 +29,25 @@ function Connect-O365Service {
         $userCredential = $null
         # Use Credentials only if MFA is not required
         if (-not $MFA.IsPresent) {
-            # Look up stored Secret if available
+            # See if SecretManagement module is installed.
             if ($null -eq (Get-Module -Name "Microsoft.PowerShell.SecretManagement" -ListAvailable -Verbose:$moduleVerbose)) {
-                Write-Verbose -Message ("[BEGIN] Microsoft.PowerShell.SecretManagement Module is not present. Secret Vaults unavailable." -f $service)
-            }
-            else {
-                Import-Module -Name "Microsoft.PowerShell.SecretManagement" -Verbose:$moduleVerbose
-                Write-Verbose -Message "[BEGIN] Looking up stored credential in Secret Vaults ..."
-                if ($cachedCredentials = Get-SecretInfo | Where-Object TypeName -eq PSCredential | 
-                    ForEach-Object { Get-Secret $PSItem.Name -Vault $PSItem.Vault | Where-Object UserName -eq $UserPrincipalName } | 
-                    Select-Object -First 1) {
-                    Write-Verbose -Message "[BEGIN] Secret found and retreived from the Vault."
-                    $userCredential = $cachedCredentials
-                }
-            }
-            # Fallback to standard Credential prompt
-            if (-not $userCredential) {
+                Write-Verbose -Message "[BEGIN] Microsoft.PowerShell.SecretManagement Module is not present. Secret Vault(s) unavailable."
+                # If no, fallback to standard Credential prompt
                 Write-Verbose -Message "[BEGIN] Falling back to Credential Prompt ..."
                 $userCredential = Get-Credential -Message "Enter credential to use (UPN)" -UserName $UserPrincipalName               
+
+            }
+            else {
+                # If yes, look up stored secret
+                Import-Module -Name "Microsoft.PowerShell.SecretManagement" -Verbose:$moduleVerbose
+                Write-Verbose -Message "[BEGIN] Looking up stored credential in Secret Vault(s) ..."
+                # Find all credentials in secret vault(s) which username is matching UPN
+                if ($vaultCredential = (Get-SecretInfo | Where-Object Type -eq PSCredential |
+                    ForEach-Object { Get-Secret $PSItem.Name -Vault $PSItem.VaultName | Where-Object UserName -eq $UserPrincipalName }) | Select-Object -First 1) {
+                    Write-Verbose -Message "[BEGIN] Secret found and successfully retreived from the vault."
+                    # Use first credential found (just in case there were more!?)
+                    $userCredential = $vaultCredential
+                }
             }
         }
         Write-Output "Selected services: $($tryO365Services -join ' | ')"
