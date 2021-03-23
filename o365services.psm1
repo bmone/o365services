@@ -118,37 +118,36 @@ function Connect-O365Service {
             "Skype" { }
             "Teams" { }
             "InformationProtection" {
-#                # Azure Information Protection [AIP]
-#                $o365Service = $o365ServiceTemplate.Clone()
-#                $o365Service.Name = $PSItem
-#                $o365Service.ModuleName = "AIPService"
-#                if ($null -eq ($o365Service.ModuleInfo = Get-Module -Name $o365Service.ModuleName -ListAvailable -Verbose:$verboseFlag))  {
-#                    Write-Warning -Message ("[PROCESS] Skipping {0}! {1} module is not present." -f $o365Service.Name, $o365Service.ModuleName)
-#                }
-#                else {
-#                    $o365Service.ModuleVersion = (($o365Service.ModuleInfo).Version).ToString()
-#                    $hashArgs = @{ Credential = $userCredential }
-#                    switch ($true) {
-#                        { $useMFA } { $hashArgs.Add('AccountId', $UserPrincipalName) ; $hashArgs.Remove('Credential') }
-#                        { $TenantID } { $hashArgs.Add('TenantID', $TenantID) ; }
-#                    }
-#                    Import-Module -Name $o365Service.ModuleName -Verbose:$verboseFlag
-#                    try { 
-#                        Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect to {0} ..." -f $o365Service.Name)
-#                        $null = Connect-AIPService @hashArgs -ErrorAction Stop
-#                        # if ($tID = Get-AzureADTenantDetail) { $o365Service += (" [{0}]" -f $tID.DisplayName) }
-#                        Write-Verbose -Message ("[PROCESS] [TRY] {0} connected." -f $o365Service.Name)
-#                        $o365Service.IsConnected = $true
-#                        $o365Service.ConnectedAt = (Get-Date)
-#                        $script:connectedO365Services += $o365Service
-#                    }
-#                    catch {
-#                        Write-Warning -Message ("[PROCESS] [CATCH] {0} - Connection exception occured!" -f $o365Service)
-#                        $PSCmdlet.ThrowTerminatingError($PSitem)
-#                    }
-#            }
+                # Azure Information Protection [AIP]
+                $o365Service = $PSItem
+                Write-Output ("Linking : {0}" -f $PSItem)
+                if ($null -eq (Get-Module -Name "AIPService" -ListAvailable -Verbose:$verboseFlag))  {
+                    Write-Warning -Message ("Service {0} : Skipping, AIPService module is not present." -f $o365Service)
+                }
+                else {
+                    $params = @{}
+                    switch ($true) {
+                        # $useMFA { $params.AccountId = $UserPrincipalName }
+                        $TenantID { $params.TenantID = $TenantID }
+                    }
+                    Import-Module -Name AIPService -Verbose:$verboseFlag
+                    try { 
+                        Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect service {0} ..." -f $o365Service)
+                        $null = Connect-AIPService @userCredential @params -ErrorAction Stop
+                        if ($tID = Get-AipServiceConfiguration) {
+                            Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
+                            $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}] ({2})" -f $o365Service,$tID.FunctionalState,(Get-Date))
+                            $global:connectO365Services[$o365Service]["Connected"] = $true
+                            $global:connectO365Services[$o365Service].Remove("NotConnected")
+                        }
+                    }
+                    catch {
+                        Write-Warning -Message ("[PROCESS] [CATCH] Service {0} : Connection exception occured!" -f $o365Service)
+                        $PSCmdlet.ThrowTerminatingError($PSitem)
+                    }
+                }
             }
-        }
+        }     
     }
     end {
         if ($global:connectO365Services.Count -gt 0) {
