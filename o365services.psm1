@@ -115,7 +115,6 @@ function Connect-O365Service {
             "ExchangeOnline" { }
             "SharePoint" { }
             "SecurtiyAndCompliance" { }
-            "Skype" { }
             "Teams" {
                 $o365Service = $PSItem
                 Write-Output ("Linking : {0}" -f $PSItem)
