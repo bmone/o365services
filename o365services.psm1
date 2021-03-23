@@ -69,8 +69,8 @@ function Connect-O365Service {
                             $null = Connect-MsolService @userCredential -ErrorAction Stop
                             if ($tID = Get-MsolCompanyInformation -ErrorAction SilentlyContinue) { 
                                 Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
-                                $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}] ({2})" -f $o365Service, $tID.DisplayName,(Get-Date))
-                                $global:connectO365Services[$o365Service]["Connected"] = $true
+                                $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}] ({2})" -f $o365Service,$tID.DisplayName,$tID.ObjectId)
+                                $global:connectO365Services[$o365Service]["Connected"] = (Get-Date)
                                 $global:connectO365Services[$o365Service].Remove("NotConnected")
                             }
                         }
@@ -100,8 +100,8 @@ function Connect-O365Service {
                         $null = Connect-AzureAD @params @userCredential -ErrorAction Stop
                         if ($tID = Get-AzureADTenantDetail -ErrorAction SilentlyContinue) {
                             Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
-                            $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}|{2}] ({3})" -f $o365Service,$tID.DisplayName,$tID.ObjectId,(Get-Date))
-                            $global:connectO365Services[$o365Service]["Connected"] = $true
+                            $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}] ({2})" -f $o365Service,$tID.DisplayName,$tID.ObjectId)
+                            $global:connectO365Services[$o365Service]["Connected"] = (Get-Date)
                             $global:connectO365Services[$o365Service].Remove("NotConnected")
                         }   
                     }
@@ -133,8 +133,8 @@ function Connect-O365Service {
                         Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect service {0} ..." -f $o365Service)
                         $null = Connect-MicrosoftTeams @params @userCredential -ErrorAction Stop
                         Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
-                        $global:connectO365Services[$o365Service]["Status"] = ("{0} ({1})" -f $o365Service,(Get-Date))
-                        $global:connectO365Services[$o365Service]["Connected"] = $true
+                        $global:connectO365Services[$o365Service]["Status"] = ("{0}" -f $o365Service)
+                        $global:connectO365Services[$o365Service]["Connected"] = (Get-Date)
                         $global:connectO365Services[$o365Service].Remove("NotConnected")
                     }
                     catch {
@@ -161,8 +161,8 @@ function Connect-O365Service {
                         $null = Connect-AIPService @userCredential @params -ErrorAction Stop
                         if ($tID = Get-AipServiceConfiguration) {
                             Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
-                            $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}] ({2})" -f $o365Service,$tID.FunctionalState,(Get-Date))
-                            $global:connectO365Services[$o365Service]["Connected"] = $true
+                            $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}]" -f $o365Service,$tID.FunctionalState)
+                            $global:connectO365Services[$o365Service]["Connected"] = (Get-Date)
                             $global:connectO365Services[$o365Service].Remove("NotConnected")
                         }
                     }
