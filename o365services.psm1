@@ -109,11 +109,39 @@ function Connect-O365Service {
                         Write-Warning -Message ("[PROCESS] [CATCH] Service {0} : Connection exception occured!" -f $o365Service)
                         $PSCmdlet.ThrowTerminatingError($PSitem)
                     }
-               }
+                }
             }
             "ExchangeOnPrem" { }
             "ExchangeOnline" { }
-            "SharePoint" { }
+            "SharePointOnline" {
+                $o365Service = $PSItem
+                Write-Output ("Linking : {0}" -f $PSItem)
+                if ($null -eq (Get-Module -Name "Microsoft.Online.SharePoint.PowerShell" -ListAvailable -Verbose:$verboseFlag)) {
+                    Write-Warning -Message ("Service {0} : Skipping, Microsoft.Online.SharePoint.PowerShell Module is not present." -f $o365Service)
+                }
+                else {
+                    Import-Module Microsoft.Online.SharePoint.PowerShell -Verbose:$verboseFlag
+                    do {
+                        # Ask for Tenant Name
+                        $tID = Read-Host -Prompt "Please enter Tenant Name"
+                    } until ($tID)
+                    $adminUrl = ("https://{0}-admin.sharepoint.com" -f $tID)
+                    try {
+                        Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect service {0} ..." -f $o365Service)
+                        $null = Connect-SPOService -Url $adminUrl @userCredential -WarningAction SilentlyContinue -ErrorAction Stop
+                        if ($tID = Get-SPOHomeSite -ErrorAction SilentlyContinue) {
+                            Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
+                            $global:connectO365Services[$o365Service]["Status"] = ("{0} [{1}] ({2})" -f $o365Service,$adminUrl,$tID.Value)
+                            $global:connectO365Services[$o365Service]["Connected"] = (Get-Date)
+                            $global:connectO365Services[$o365Service].Remove("NotConnected")
+                        }   
+                    }
+                    catch {
+                        Write-Warning -Message ("[PROCESS] [CATCH] Service {0} : Connection exception occured!" -f $o365Service)
+                        $PSCmdlet.ThrowTerminatingError($PSitem)
+                    }
+                }
+            }
             "SecurtiyAndCompliance" { }
             "Teams" {
                 $o365Service = $PSItem
