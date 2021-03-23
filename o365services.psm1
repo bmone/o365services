@@ -116,7 +116,33 @@ function Connect-O365Service {
             "SharePoint" { }
             "SecurtiyAndCompliance" { }
             "Skype" { }
-            "Teams" { }
+            "Teams" {
+                $o365Service = $PSItem
+                Write-Output ("Linking : {0}" -f $PSItem)
+                if ($null -eq (Get-Module -Name "MicrosoftTeams" -ListAvailable -Verbose:$verboseFlag)) {
+                    Write-Warning -Message ("Service {0} : Skipping, MicrosoftTeams Module is not present." -f $o365Service)
+                }
+                else {
+                    $params = @{}
+                    switch ($true) {
+                        $useMFA { $params.AccountId = $UserPrincipalName }
+                        $TenantID { $params.TenantID = $TenantID }
+                    }
+                    Import-Module MicrosoftTeams -Verbose:$verboseFlag
+                    try { 
+                        Write-Verbose -Message ("[PROCESS] [TRY] Attepmting to connect service {0} ..." -f $o365Service)
+                        $null = Connect-MicrosoftTeams @params @userCredential -ErrorAction Stop
+                        Write-Verbose -Message ("[PROCESS] [TRY] Service {0} connected." -f $o365Service)
+                        $global:connectO365Services[$o365Service]["Status"] = ("{0} ({1})" -f $o365Service,(Get-Date))
+                        $global:connectO365Services[$o365Service]["Connected"] = $true
+                        $global:connectO365Services[$o365Service].Remove("NotConnected")
+                    }
+                    catch {
+                        Write-Warning -Message ("[PROCESS] [CATCH] Service {0} : Connection exception occured!" -f $o365Service)
+                        $PSCmdlet.ThrowTerminatingError($PSitem)
+                    }
+               }
+            }
             "InformationProtection" {
                 # Azure Information Protection [AIP]
                 $o365Service = $PSItem
@@ -127,7 +153,6 @@ function Connect-O365Service {
                 else {
                     $params = @{}
                     switch ($true) {
-                        # $useMFA { $params.AccountId = $UserPrincipalName }
                         $TenantID { $params.TenantID = $TenantID }
                     }
                     Import-Module -Name AIPService -Verbose:$verboseFlag
